@@ -58,7 +58,7 @@ export async function subset(
   const sfnt = await toSfnt(input);
 
   const subsetOptions: Record<string, unknown> = {
-    layoutFeatures: opts.dropLayoutFeatures ? undefined : "*",
+    layoutFeatures: opts.dropLayoutFeatures ? [] : "*",
     noHinting: opts.dropHinting,
   };
 
@@ -68,8 +68,10 @@ export async function subset(
     subsetOptions.glyphIds = opts.glyphIds;
   } else {
     const unicodes = resolveCodepoints(opts);
-    if (opts.mode === "codepoints" && opts.codepoints) {
-      subsetOptions.unicodes = opts.codepoints;
+    if (opts.mode === "codepoints") {
+      const cps = opts.codepoints ?? [];
+      if (!cps.length) throw new Error("No valid codepoints provided.");
+      subsetOptions.unicodes = cps;
     } else {
       subsetOptions.unicodes = unicodes.length ? unicodes : [0x20];
     }

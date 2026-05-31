@@ -8,7 +8,7 @@ import {
   registerHbSubset,
   registerHbSubsetForInstance,
 } from "@fontops/core";
-import type { WorkerRequest, WorkerResponse } from "../lib/fontWorker";
+import type { WorkerJob, WorkerResponse } from "../lib/fontWorker";
 
 let ready: Promise<void> | null = null;
 
@@ -26,7 +26,8 @@ function ensureHb(): Promise<void> {
   return ready;
 }
 
-self.onmessage = async (ev: MessageEvent<WorkerRequest>) => {
+self.onmessage = async (ev: MessageEvent<WorkerJob & { id: number }>) => {
+  const id = ev.data.id;
   try {
     await ensureHb();
     const msg = ev.data;
@@ -34,22 +35,22 @@ self.onmessage = async (ev: MessageEvent<WorkerRequest>) => {
     switch (msg.type) {
       case "inspect": {
         const result = await inspect(msg.buffer);
-        response = { type: "inspect", result };
+        response = { id, type: "inspect", result };
         break;
       }
       case "subset": {
         const result = await subset(msg.buffer, msg.opts);
-        response = { type: "subset", result };
+        response = { id, type: "subset", result };
         break;
       }
       case "convert": {
         const result = await convert(msg.buffer, msg.target);
-        response = { type: "convert", result };
+        response = { id, type: "convert", result };
         break;
       }
       case "instance": {
         const result = await instance(msg.buffer, msg.axes, msg.format ?? "woff2");
-        response = { type: "instance", result };
+        response = { id, type: "instance", result };
         break;
       }
       default:
@@ -57,11 +58,15 @@ self.onmessage = async (ev: MessageEvent<WorkerRequest>) => {
     }
     const transfer: Transferable[] = [];
     if ("result" in response && response.result && "data" in response.result) {
-      transfer.push((response.result as { data: Uint8Array }).data.buffer);
+      const { data } = response.result as { data: Uint8Array };
+      const copy = data.buffer.slice(data.byteOffset, data.byteOffset + data.byteLength);
+      transfer.push(copy);
+      (response.result as { data: Uint8Array }).data = new Uint8Array(copy);
     }
     (self as DedicatedWorkerGlobalScope).postMessage(response, transfer);
   } catch (e) {
     self.postMessage({
+      id,
       type: "error",
       message: e instanceof Error ? e.message : String(e),
     });

@@ -52,8 +52,10 @@ textarea {
 
 .topbar {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   justify-content: space-between;
+  gap: 0.5rem;
   padding: 0.85rem 1.5rem;
   background: var(--surface);
   border-bottom: 1px solid var(--border);

@@ -1,47 +1,66 @@
 import type { FontInspect, SubsetOpts, SubsetResult, ConvertResult } from "@fontops/core";
 
-export type WorkerRequest =
+let jobId = 0;
+let worker: Worker | null = null;
+
+export type WorkerJob =
   | { type: "inspect"; buffer: ArrayBuffer }
   | { type: "subset"; buffer: ArrayBuffer; opts: SubsetOpts }
   | { type: "convert"; buffer: ArrayBuffer; target: "ttf" | "otf" | "woff" | "woff2" }
   | { type: "instance"; buffer: ArrayBuffer; axes: Record<string, number>; format?: "woff2" | "ttf" | "woff" };
 
-export type WorkerResponse =
-  | { type: "inspect"; result: FontInspect }
-  | { type: "subset"; result: SubsetResult }
-  | { type: "convert"; result: ConvertResult }
-  | { type: "instance"; result: SubsetResult }
-  | { type: "error"; message: string };
+export type WorkerRequest = WorkerJob & { id: number };
 
-let worker: Worker | null = null;
+export type WorkerResponse =
+  | { id: number; type: "inspect"; result: FontInspect }
+  | { id: number; type: "subset"; result: SubsetResult }
+  | { id: number; type: "convert"; result: ConvertResult }
+  | { id: number; type: "instance"; result: SubsetResult }
+  | { id: number; type: "error"; message: string };
+
+const pending = new Map<number, { resolve: (v: WorkerResponse) => void; reject: (e: Error) => void }>();
 
 function getWorker(): Worker {
   if (!worker) {
     worker = new Worker(new URL("../workers/font.worker.ts", import.meta.url), {
       type: "module",
     });
+    worker.addEventListener("message", (ev: MessageEvent<WorkerResponse>) => {
+      const data = ev.data;
+      const job = pending.get(data.id);
+      if (!job) return;
+      pending.delete(data.id);
+      if (data.type === "error") job.reject(new Error(data.message));
+      else job.resolve(data);
+    });
   }
   return worker;
 }
 
 export function runFontJob<T extends WorkerResponse>(
-  req: WorkerRequest,
+  req: WorkerJob,
   transfer?: Transferable[],
 ): Promise<T> {
+  const id = ++jobId;
   return new Promise((resolve, reject) => {
-    const w = getWorker();
-    const onMessage = (ev: MessageEvent<WorkerResponse>) => {
-      w.removeEventListener("message", onMessage);
-      if (ev.data.type === "error") reject(new Error(ev.data.message));
-      else resolve(ev.data as T);
-    };
-    w.addEventListener("message", onMessage);
-    w.postMessage(req, transfer ?? []);
+    pending.set(id, {
+      resolve: (v) => resolve(v as T),
+      reject,
+    });
+    getWorker().postMessage({ ...req, id }, transfer ?? []);
   });
 }
 
+const MIME: Record<string, string> = {
+  woff2: "font/woff2",
+  woff: "font/woff",
+  ttf: "font/ttf",
+  otf: "font/otf",
+};
+
 export function downloadBytes(data: Uint8Array, filename: string) {
-  const blob = new Blob([new Uint8Array(data)], { type: "font/woff2" });
+  const ext = filename.split(".").pop()?.toLowerCase() ?? "woff2";
+  const blob = new Blob([new Uint8Array(data)], { type: MIME[ext] ?? "application/octet-stream" });
   const url = URL.createObjectURL(blob);
   const a = document.createElement("a");
   a.href = url;

@@ -30,8 +30,14 @@ jobs:
       - name: Test
         run: pnpm test
 
+      - name: Acceptance (A1)
+        run: RUN_ACCEPTANCE=1 pnpm --filter @fontops/core test
+
       - name: Build web
         run: pnpm --filter @fontops/web build
+
+      - name: E2E
+        run: pnpm --filter @fontops/web exec playwright install chromium && pnpm test:e2e
 
       - name: Build core
         run: pnpm --filter @fontops/core build
@@ -48,15 +54,17 @@ jobs:
       - name: Install worker deps
         run: pip install fastapi uvicorn python-multipart fonttools
 
-      - name: Worker health
+      - name: Worker health and QA smoke
         run: |
           cd apps/worker
           uvicorn main:app --host 127.0.0.1 --port 8080 &
-          sleep 3
-          curl -sf http://127.0.0.1:8080/health
+          for i in $(seq 1 30); do curl -sf http://127.0.0.1:8080/health && break; sleep 1; done
+          curl -sf -X POST -F "file=@../../packages/web/public/samples/Inter-Regular.woff2" \
+            http://127.0.0.1:8080/v1/qa | grep -q '"checks"'
 
   docker-config:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - run: docker compose config
+      - run: docker compose build

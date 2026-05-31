@@ -83,7 +83,9 @@ export async function inspect(input: ArrayBuffer | File): Promise<FontInspect> {
     }
   }
 
-  const hinting = HINT_TABLES.some((t) => tables.includes(t.trim()));
+  const hinting = HINT_TABLES.some((t) =>
+    tables.some((x) => x.replace(/\0/g, "").trim() === t.trim()),
+  );
 
   const features: string[] = [];
   const gsub = (font.tables as { gsub?: { features: { tag: string }[] } }).gsub;

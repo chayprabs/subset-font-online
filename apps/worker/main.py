@@ -43,8 +43,15 @@ def health() -> dict[str, str]:
 async def qa(file: UploadFile = File(...)) -> QAReport:
     checks: list[CheckItem] = []
     with tempfile.TemporaryDirectory(prefix="fontops-") as tmp:
-        dest = Path(tmp) / (file.filename or "font.bin")
+        safe_name = Path(file.filename or "font.bin").name
+        if not safe_name or safe_name in (".", ".."):
+            safe_name = "font.bin"
+        dest = Path(tmp) / safe_name
         data = await file.read()
+        if len(data) > 50_000_000:
+            from fastapi import HTTPException
+
+            raise HTTPException(status_code=413, detail="File too large (max 50MB)")
         dest.write_bytes(data)
         size = len(data)
         checks.append(
@@ -95,9 +102,9 @@ async def qa(file: UploadFile = File(...)) -> QAReport:
                 )
             )
             font.close()
-        except Exception as exc:
+        except Exception:
             checks.append(
-                CheckItem(id="fonttools-parse", status="FAIL", message=str(exc)[:500])
+                CheckItem(id="fonttools-parse", status="FAIL", message="Font could not be parsed")
             )
 
         fb = shutil.which("fontbakery")

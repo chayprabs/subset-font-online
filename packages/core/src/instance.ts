@@ -22,20 +22,22 @@ export async function instance(
     throw new Error("HarfBuzz subset WASM not registered.");
   }
   const before = await inspect(input);
+  if (!before.variableAxes?.length) {
+    throw new Error("Font has no variation axes; upload a variable font for instancing.");
+  }
   const sfnt = await toSfnt(input);
 
-  const variationAxes: Record<string, number> = { ...axisValues };
+  const glyphIds = Array.from({ length: before.numGlyphs }, (_, i) => i);
 
   const result = await hbSubsetImpl(sfnt, {
-    text: " ",
-    variationAxes,
+    glyphIds,
+    variationAxes: { ...axisValues },
     layoutFeatures: "*",
   });
 
   const out = await fromSfnt(new Uint8Array(result), outputFormat);
-  const after = await inspect(
-    out.buffer.slice(out.byteOffset, out.byteOffset + out.byteLength) as ArrayBuffer,
-  );
+  const afterBuf = out.buffer.slice(out.byteOffset, out.byteOffset + out.byteLength) as ArrayBuffer;
+  const after = await inspect(afterBuf);
 
   return {
     data: out,

@@ -1,7 +1,7 @@
-import { useCallback, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Download, Loader2, Upload } from "lucide-react";
 import type { FontInspect, SubsetResult } from "@fontops/core";
-import { UNICODE_PRESETS } from "@fontops/core";
+import { UNICODE_PRESETS, parseCodepointList } from "@fontops/core";
 import { downloadBytes, formatBytes, runFontJob } from "../lib/fontWorker";
 
 type Tab = "inspect" | "subset" | "convert" | "instance" | "qa" | "specimen";
@@ -32,6 +32,8 @@ export default function HomePage() {
   const [convertTarget, setConvertTarget] = useState<"woff2" | "woff" | "ttf" | "otf">("woff2");
   const [axisValues, setAxisValues] = useState<Record<string, number>>({ wght: 600 });
   const [subsetResult, setSubsetResult] = useState<SubsetResult | null>(null);
+  const [instanceResult, setInstanceResult] = useState<SubsetResult | null>(null);
+  const [specimenFontUrl, setSpecimenFontUrl] = useState<string | null>(null);
   const [specimenText, setSpecimenText] = useState("The quick brown fox jumps over the lazy dog.");
   const [fontUrl, setFontUrl] = useState("");
   const [googleCssUrl, setGoogleCssUrl] = useState("");
@@ -47,12 +49,14 @@ export default function HomePage() {
     const buf = await f.arrayBuffer();
     setBuffer(buf);
     setSubsetResult(null);
+    setInstanceResult(null);
     setInspectData(null);
     try {
       setLoading(true);
-      const res = await runFontJob<{ type: "inspect"; result: FontInspect }>(
-        { type: "inspect", buffer: buf },
-        [buf],
+      const inspectBuf = buf.slice(0);
+      const res = await runFontJob<{ id: number; type: "inspect"; result: FontInspect }>(
+        { type: "inspect", buffer: inspectBuf },
+        [inspectBuf],
       );
       if (res.type === "inspect") {
         setInspectData(res.result);
@@ -93,10 +97,7 @@ export default function HomePage() {
           opts: {
             mode,
             text: mode === "text" ? subsetText : undefined,
-            codepoints:
-              mode === "codepoints"
-                ? codepoints.split(/[\s,]+/).map((s) => parseInt(s, 16)).filter((n) => !Number.isNaN(n))
-                : undefined,
+            codepoints: mode === "codepoints" ? parseCodepointList(codepoints) : undefined,
             unicodeRange: mode === "unicode-range" ? unicodePreset : undefined,
             dropHinting,
             dropLayoutFeatures: dropLayout,
@@ -106,6 +107,7 @@ export default function HomePage() {
         [buf],
       );
       if (res.type === "subset") setSubsetResult(res.result);
+      else throw new Error(`Unexpected worker response: ${(res as { type: string }).type}`);
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
     } finally {
@@ -125,7 +127,7 @@ export default function HomePage() {
       );
       if (res.type === "convert") {
         downloadBytes(res.result.data, res.result.suggestedFilename);
-      }
+      } else throw new Error(`Unexpected worker response: ${(res as { type: string }).type}`);
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
     } finally {
@@ -134,16 +136,23 @@ export default function HomePage() {
   };
 
   const runInstance = async () => {
-    if (!buffer) return;
+    if (!buffer || !inspectData?.variableAxes?.length) return;
     setLoading(true);
     setError(null);
     try {
       const buf = buffer.slice(0);
+      const axes = Object.fromEntries(
+        inspectData.variableAxes.map((ax) => [
+          ax.tag,
+          Math.min(ax.max, Math.max(ax.min, axisValues[ax.tag] ?? ax.default)),
+        ]),
+      );
       const res = await runFontJob(
-        { type: "instance", buffer: buf, axes: axisValues, format: "woff2" },
+        { type: "instance", buffer: buf, axes, format: "woff2" },
         [buf],
       );
-      if (res.type === "instance") setSubsetResult(res.result);
+      if (res.type === "instance") setInstanceResult(res.result);
+      else throw new Error(`Unexpected worker response: ${(res as { type: string }).type}`);
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
     } finally {
@@ -213,6 +222,18 @@ export default function HomePage() {
     file && subsetResult
       ? `${formatBytes(file.size)} → ${formatBytes(subsetResult.sizeBytes)}`
       : null;
+
+  const previewFont = subsetResult ?? instanceResult;
+
+  useEffect(() => {
+    if (!previewFont) {
+      setSpecimenFontUrl(null);
+      return;
+    }
+    const url = URL.createObjectURL(new Blob([new Uint8Array(previewFont.data)]));
+    setSpecimenFontUrl(url);
+    return () => URL.revokeObjectURL(url);
+  }, [previewFont]);
 
   return (
     <main className="main">
@@ -287,7 +308,15 @@ export default function HomePage() {
               key={s.name}
               type="button"
               className="btn btn-secondary"
-              onClick={() => void fetch(s.url).then((r) => r.arrayBuffer()).then((b) => loadBuffer(new File([b], s.url.split("/").pop()!)))}
+              onClick={() =>
+                void fetch(s.url)
+                  .then((r) => {
+                    if (!r.ok) throw new Error(`Sample fetch failed: ${r.status}`);
+                    return r.arrayBuffer();
+                  })
+                  .then((b) => loadBuffer(new File([b], s.url.split("/").pop()!)))
+                  .catch((e) => setError(e instanceof Error ? e.message : String(e)))
+              }
             >
               {s.name}
             </button>
@@ -316,6 +345,10 @@ export default function HomePage() {
       {error && <p className="error">{error}</p>}
 
       <div className="panel">
+        {tab === "inspect" && !inspectData && buffer && !loading && (
+          <p>No inspection data available.</p>
+        )}
+        {tab === "inspect" && !buffer && <p>Upload a font to inspect tables and coverage.</p>}
         {tab === "inspect" && inspectData && (
           <>
             <p>
@@ -495,12 +528,12 @@ export default function HomePage() {
             <button type="button" className="btn" disabled={!buffer || loading} onClick={() => void runInstance()}>
               Bake static instance
             </button>
-            {subsetResult && (
+            {instanceResult && (
               <button
                 type="button"
                 className="btn btn-secondary"
                 style={{ marginLeft: "0.5rem" }}
-                onClick={() => downloadBytes(subsetResult.data, "instance.woff2")}
+                onClick={() => downloadBytes(instanceResult.data, "instance.woff2")}
               >
                 <Download size={16} /> Download
               </button>
@@ -534,12 +567,12 @@ export default function HomePage() {
               <label htmlFor="specimen">Preview text</label>
               <input id="specimen" value={specimenText} onChange={(e) => setSpecimenText(e.target.value)} />
             </div>
-            {subsetResult && (
-              <style>{`@font-face { font-family: 'SpecimenFont'; src: url(${URL.createObjectURL(new Blob([new Uint8Array(subsetResult.data)]))}); }`}</style>
+            {specimenFontUrl && (
+              <style>{`@font-face { font-family: 'SpecimenFont'; src: url('${specimenFontUrl}'); }`}</style>
             )}
             <div
               style={{
-                fontFamily: subsetResult ? "SpecimenFont, sans-serif" : "inherit",
+                fontFamily: specimenFontUrl ? "SpecimenFont, sans-serif" : "inherit",
                 fontSize: "1.25rem",
                 padding: "1rem",
                 border: "1px solid var(--border)",
@@ -550,7 +583,7 @@ export default function HomePage() {
             </div>
             <div className="specimen-grid">
               {[8, 12, 16, 24, 32, 48, 64, 96].map((px) => (
-                <div key={px} className="specimen-cell" style={{ fontSize: px, fontFamily: subsetResult ? "SpecimenFont" : "inherit" }}>
+                <div key={px} className="specimen-cell" style={{ fontSize: px, fontFamily: specimenFontUrl ? "SpecimenFont" : "inherit" }}>
                   <div style={{ fontSize: "0.7rem", color: "var(--muted)" }}>{px}px</div>
                   {specimenText.slice(0, 24)}
                 </div>
@@ -560,7 +593,7 @@ export default function HomePage() {
               type="button"
               className="btn btn-secondary"
               style={{ marginTop: "1rem" }}
-              disabled={!subsetResult}
+              disabled={!previewFont}
               onClick={() => {
                 const canvas = document.createElement("canvas");
                 canvas.width = 800;
