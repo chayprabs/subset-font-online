@@ -52,7 +52,7 @@ jobs:
           python-version: "3.12"
 
       - name: Install worker deps
-        run: pip install fastapi uvicorn python-multipart fonttools
+        run: pip install fastapi uvicorn python-multipart fonttools opentype-sanitizer
 
       - name: Worker health and QA smoke
         run: |
@@ -61,6 +61,8 @@ jobs:
           for i in $(seq 1 30); do curl -sf http://127.0.0.1:8080/health && break; sleep 1; done
           curl -sf -X POST -F "file=@../../packages/web/public/samples/Inter-Regular.woff2" \
             http://127.0.0.1:8080/v1/qa | grep -q '"checks"'
+          curl -sf -X POST -F "file=@../../packages/web/public/samples/Inter-Regular.woff2" \
+            http://127.0.0.1:8080/v1/shaping | grep -q '"latin"'
 
   docker-config:
     runs-on: ubuntu-latest

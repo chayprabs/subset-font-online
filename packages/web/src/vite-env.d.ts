@@ -9,6 +9,7 @@ interface ImportMeta {
 }
 
 declare module "opentype.js";
+declare module "pako";
 
 declare module "hb-subset-wasm/hb-subset.wasm?url" {
   const url: string;

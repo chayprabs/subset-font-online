@@ -21,6 +21,19 @@ const TABLE_TAGS = [
 
 const HINT_TABLES = ["prep", "fpgm", "cvt "];
 
+const NAME_IDS: Record<number, string> = {
+  0: "copyright",
+  1: "fontFamily",
+  2: "fontSubfamily",
+  3: "uniqueID",
+  4: "fullName",
+  5: "version",
+  6: "postScriptName",
+  7: "trademark",
+  13: "license",
+  14: "licenseURL",
+};
+
 export async function inspect(input: ArrayBuffer | File): Promise<FontInspect> {
   const buffer = input instanceof File ? await input.arrayBuffer() : input;
   const format = detectFormat(buffer);
@@ -37,18 +50,15 @@ export async function inspect(input: ArrayBuffer | File): Promise<FontInspect> {
   for (let i = 0; i < numTables; i++) {
     const off = 12 + i * 16;
     tables.push(
-      String.fromCharCode(
-        raw[off],
-        raw[off + 1],
-        raw[off + 2],
-        raw[off + 3],
-      ),
+      String.fromCharCode(raw[off], raw[off + 1], raw[off + 2], raw[off + 3]),
     );
   }
 
   const supported = new Set<number>();
-  if (font.glyphs?.glyphs) {
-    for (const g of font.glyphs.glyphs) {
+  const glyphList = font.glyphs?.glyphs;
+  if (glyphList) {
+    const iter = Array.isArray(glyphList) ? glyphList : Object.values(glyphList as Record<string, { unicode?: number }>);
+    for (const g of iter) {
       if (g?.unicode !== undefined) supported.add(g.unicode);
     }
   }
@@ -70,15 +80,16 @@ export async function inspect(input: ArrayBuffer | File): Promise<FontInspect> {
   });
 
   const names: FontInspect["names"] = [];
-  const nameTable = (font.tables as { name?: { names: Record<string, { platformID: number; encodingID: number; languageID: number; nameID: number }> } }).name;
-  if (nameTable?.names) {
-    for (const [key, rec] of Object.entries(nameTable.names)) {
+  if (font.names) {
+    for (const [key, val] of Object.entries(font.names)) {
+      if (!val) continue;
+      const nameId = Object.entries(NAME_IDS).find(([, v]) => v === key)?.[0];
       names.push({
-        platformId: rec.platformID,
-        encodingId: rec.encodingID,
-        languageId: rec.languageID,
-        nameId: rec.nameID,
-        value: String(key),
+        platformId: 3,
+        encodingId: 1,
+        languageId: 0,
+        nameId: nameId ? Number(nameId) : 0,
+        value: String(val),
       });
     }
   }
@@ -94,22 +105,27 @@ export async function inspect(input: ArrayBuffer | File): Promise<FontInspect> {
   }
 
   const licenseHints: string[] = [];
-  const licenseName = font.names?.license ?? font.names?.licenseDescription;
-  if (licenseName) licenseHints.push(String(licenseName));
+  if (font.names?.license) licenseHints.push(String(font.names.license));
   if (font.names?.copyright) licenseHints.push(String(font.names.copyright));
 
   let variableAxes: FontInspect["variableAxes"];
-  const fvar = (font.tables as { fvar?: { axes: Record<string, { minValue: number; defaultValue: number; maxValue: number }>; instances: { name: { en: string }; coordinates: Record<string, number> }[] } }).fvar;
+  let namedInstances: FontInspect["namedInstances"];
+  const fvar = (font.tables as {
+    fvar?: {
+      axes: Record<string, { minValue: number; defaultValue: number; maxValue: number }>;
+      instances: { name: { en: string }; coordinates: Record<string, number> }[];
+    };
+  }).fvar;
   if (fvar?.axes) {
     variableAxes = Object.entries(fvar.axes).map(([tag, ax]) => ({
       tag,
       min: ax.minValue,
       default: ax.defaultValue,
       max: ax.maxValue,
-      namedInstances: (fvar.instances ?? []).map((inst) => ({
-        name: inst.name?.en ?? "Instance",
-        values: inst.coordinates,
-      })),
+    }));
+    namedInstances = (fvar.instances ?? []).map((inst) => ({
+      name: inst.name?.en ?? "Instance",
+      values: inst.coordinates,
     }));
   }
 
@@ -117,9 +133,12 @@ export async function inspect(input: ArrayBuffer | File): Promise<FontInspect> {
     format,
     sizeBytes,
     numGlyphs,
-    tables: TABLE_TAGS.filter((t) => tables.some((x) => x.replace(/\0/g, "") === t.replace(/\0/g, ""))),
+    tables: TABLE_TAGS.filter((t) =>
+      tables.some((x) => x.replace(/\0/g, "").trim() === t.replace(/\0/g, "")),
+    ),
     unicodeRanges,
     variableAxes,
+    namedInstances,
     names,
     hinting,
     features,

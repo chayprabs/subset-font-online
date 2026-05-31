@@ -11,8 +11,8 @@ export interface FontInspect {
     min: number;
     default: number;
     max: number;
-    namedInstances: { name: string; values: Record<string, number> }[];
   }[];
+  namedInstances?: { name: string; values: Record<string, number> }[];
   names: {
     platformId: number;
     encodingId: number;

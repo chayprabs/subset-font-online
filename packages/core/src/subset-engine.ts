@@ -64,8 +64,10 @@ export async function subset(
 
   if (opts.mode === "text") {
     subsetOptions.text = opts.text ?? "";
-  } else if (opts.mode === "glyph-ids" && opts.glyphIds?.length) {
-    subsetOptions.glyphIds = opts.glyphIds;
+  } else if (opts.mode === "glyph-ids") {
+    const ids = opts.glyphIds ?? [];
+    if (!ids.length) throw new Error("No glyph IDs provided.");
+    subsetOptions.glyphIds = ids;
   } else {
     const unicodes = resolveCodepoints(opts);
     if (opts.mode === "codepoints") {

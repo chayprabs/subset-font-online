@@ -3,18 +3,18 @@
 Subset, convert and QA **TTF, OTF, WOFF and WOFF2** fonts online — glyph coverage,
 variable-font instancing and WOFF2 output in the browser.
 
-FontOps runs HarfBuzz subsetting in your browser via WebAssembly. Inspect tables,
-subset by text or Unicode ranges, convert formats, bake variable-font instances, and
-preview specimens — without uploading files unless you opt in to server-side QA.
-
 ## Features
 
-- **Inspect** — tables, Unicode coverage, naming, variable axes, hinting, license hints
-- **Subset** — by text, codepoints, Unicode presets (Latin, Cyrillic, CJK common, …)
-- **Convert** — TTF, OTF, WOFF, WOFF2
-- **Instance** — bake static fonts from variable axis values
-- **Specimen** — live preview and PNG export
-- **QA** (optional) — OTS + fontTools checks via self-hosted worker
+| Area | Capabilities |
+|------|----------------|
+| **Inspect** | Tables, Unicode coverage, naming, variable axes, named instances, hinting, license hints, raw JSON |
+| **Subset** | Text, codepoints, Unicode presets, CJK language pack, glyph IDs; drop hinting/layout; live size estimate |
+| **Convert** | TTF, OTF, WOFF, WOFF2; batch ZIP export; TTX via worker |
+| **Instance** | Variable axis sliders, snap to named instances, bake static WOFF2 |
+| **QA** | OTS, FontBakery (Google Fonts / universal), server cmap shaping (opt-in) |
+| **Specimen** | Live preview, 8–96px grid, PNG/SVG export, browser shaping smoke test |
+
+Processing runs in a **Web Worker** with HarfBuzz (`hb-subset-wasm`). Files stay in your browser unless you opt in to the QA worker.
 
 ## Quick start
 
@@ -25,33 +25,37 @@ pnpm dev
 
 Open http://localhost:5173
 
-### Self-host with Docker
+### Self-host (Docker)
 
 ```bash
 docker compose up --build
 ```
 
-Web: http://localhost:5173 · Worker: http://localhost:8080
+- Web: http://localhost:5173  
+- Worker API: http://localhost:8080 (proxied at `/v1/*` through nginx)
 
-## Monorepo layout
+## Monorepo
 
 ```
-packages/core/   # @fontops/core — inspect, subset, convert (hb-subset-wasm)
-packages/web/    # Vite + React 19 SPA
-apps/worker/     # FastAPI FontBakery/OTS QA (AGPL-3.0)
+packages/core/     @fontops/core — inspect, subset, convert, instance
+packages/web/      Vite + React 19 SPA
+apps/worker/       FastAPI — QA, TTX, shaping (AGPL-3.0)
 ```
+
+## Acceptance criteria (PRD §20)
+
+| ID | Test | Command |
+|----|------|---------|
+| A1 | Inter “Hello” subset ≤ 40 KB | `RUN_ACCEPTANCE=1 pnpm --filter @fontops/core test` |
+| A2 | Variable instance wght=600 | same |
+| A3 | WOFF2 round-trip | same |
 
 ## License
 
-- Browser packages (`packages/core`, `packages/web`): **MIT**
-- Worker (`apps/worker`): **AGPL-3.0**
+- **MIT** — `packages/core`, `packages/web`
+- **AGPL-3.0** — `apps/worker`
 
 ## Links
 
-- [Privacy Policy](/privacy) (on deployed site)
 - Maintainer: [@chayprabs](https://x.com/chayprabs) · [chaitanyaprabuddha.com](https://www.chaitanyaprabuddha.com)
-
-## Topics
-
-`font` `font-subset` `woff2` `ttf` `otf` `woff` `harfbuzz` `fonttools` `variable-fonts`
-`font-instancing` `font-converter` `glyph-coverage` `font-qa` `online-tool`
+- [Privacy](/privacy) · [Terms](/terms) (on deployed site)
