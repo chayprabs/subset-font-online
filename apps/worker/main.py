@@ -60,6 +60,23 @@ class ShapingItem(BaseModel):
     message: str
 
 
+def resolve_ots_binary() -> str | None:
+    found = shutil.which("ots-sanitize")
+    if found:
+        return found
+    try:
+        import importlib.util
+
+        spec = importlib.util.find_spec("ots")
+        if spec and spec.submodule_search_locations:
+            candidate = Path(spec.submodule_search_locations[0]) / "ots-sanitize"
+            if candidate.is_file():
+                return str(candidate)
+    except Exception:
+        pass
+    return None
+
+
 def safe_dest(tmp: str, filename: str | None) -> Path:
     safe_name = Path(filename or "font.bin").name
     if not safe_name or safe_name in (".", ".."):
@@ -95,7 +112,7 @@ async def qa(
         digest = hashlib.sha256(data).hexdigest()[:16]
         checks.append(CheckItem(id="sha256", status=CheckStatus.PASS, message=f"prefix {digest}"))
 
-        ots = shutil.which("ots-sanitize")
+        ots = resolve_ots_binary()
         if ots:
             proc = subprocess.run(
                 [ots, str(dest)],

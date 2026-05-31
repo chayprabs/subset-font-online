@@ -52,7 +52,7 @@ jobs:
           python-version: "3.12"
 
       - name: Install worker deps
-        run: pip install fastapi uvicorn python-multipart fonttools opentype-sanitizer
+        run: pip install fastapi uvicorn python-multipart fonttools opentype-sanitizer brotli
 
       - name: Worker health and QA smoke
         run: |

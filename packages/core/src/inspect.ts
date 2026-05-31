@@ -112,17 +112,28 @@ export async function inspect(input: ArrayBuffer | File): Promise<FontInspect> {
   let namedInstances: FontInspect["namedInstances"];
   const fvar = (font.tables as {
     fvar?: {
-      axes: Record<string, { minValue: number; defaultValue: number; maxValue: number }>;
+      axes:
+        | Record<string, { minValue: number; defaultValue: number; maxValue: number }>
+        | { tag: string; minValue: number; defaultValue: number; maxValue: number }[];
       instances: { name: { en: string }; coordinates: Record<string, number> }[];
     };
   }).fvar;
   if (fvar?.axes) {
-    variableAxes = Object.entries(fvar.axes).map(([tag, ax]) => ({
-      tag,
-      min: ax.minValue,
-      default: ax.defaultValue,
-      max: ax.maxValue,
-    }));
+    if (Array.isArray(fvar.axes)) {
+      variableAxes = fvar.axes.map((ax) => ({
+        tag: ax.tag,
+        min: ax.minValue,
+        default: ax.defaultValue,
+        max: ax.maxValue,
+      }));
+    } else {
+      variableAxes = Object.entries(fvar.axes).map(([tag, ax]) => ({
+        tag,
+        min: ax.minValue,
+        default: ax.defaultValue,
+        max: ax.maxValue,
+      }));
+    }
     namedInstances = (fvar.instances ?? []).map((inst) => ({
       name: inst.name?.en ?? "Instance",
       values: inst.coordinates,

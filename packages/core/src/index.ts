@@ -18,3 +18,4 @@ export {
   codepointsFromText,
 } from "./unicode-presets.js";
 export { parseGoogleFontsCss, fetchGoogleFontsCss } from "./google-fonts.js";
+export { getSupportedCodepoints, intersectCodepoints } from "./cmap.js";

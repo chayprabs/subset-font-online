@@ -44,7 +44,7 @@ self.onmessage = async (ev: MessageEvent<WorkerJob & { id: number }>) => {
         break;
       }
       case "convert": {
-        const result = await convert(msg.buffer, msg.target);
+        const result = await convert(msg.buffer, msg.target, msg.basename);
         response = { id, type: "convert", result };
         break;
       }

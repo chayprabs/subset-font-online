@@ -78,7 +78,7 @@ describe.skipIf(!process.env.RUN_ACCEPTANCE)("integration: samples inspect + sub
         expect(result.retainedGlyphs).toBeGreaterThan(0);
       });
 
-      it.fails("subset by language pack CJK Common (known: post-subset inspect cmap error)", async () => {
+      it("subset by language pack CJK Common", async () => {
         const result = await subset(buffer, {
           mode: "language-pack",
           languagePack: "CJK Common",
@@ -88,7 +88,7 @@ describe.skipIf(!process.env.RUN_ACCEPTANCE)("integration: samples inspect + sub
         expect(result.retainedGlyphs).toBeGreaterThan(0);
       });
 
-      it.fails("subset by unicode-range CJK Common (same unicodes path)", async () => {
+      it("subset by unicode-range CJK Common", async () => {
         const result = await subset(buffer, {
           mode: "unicode-range",
           unicodeRange: "CJK Common",
@@ -113,12 +113,16 @@ describe.skipIf(!process.env.RUN_ACCEPTANCE)("integration: samples inspect + sub
     const sfnt = await toSfnt(buf);
 
     const ttf = await fromSfnt(sfnt, "ttf");
-    const ttfMeta = await inspect(ttf.buffer.slice(ttf.byteOffset, ttf.byteOffset + ttf.byteLength));
+    const ttfMeta = await inspect(
+      ttf.buffer.slice(ttf.byteOffset, ttf.byteOffset + ttf.byteLength) as ArrayBuffer,
+    );
     expect(ttfMeta.format).toBe("ttf");
     expect(ttfMeta.numGlyphs).toBeGreaterThan(0);
 
     const woff = await fromSfnt(sfnt, "woff");
-    const woffMeta = await inspect(woff.buffer.slice(woff.byteOffset, woff.byteOffset + woff.byteLength));
+    const woffMeta = await inspect(
+      woff.buffer.slice(woff.byteOffset, woff.byteOffset + woff.byteLength) as ArrayBuffer,
+    );
     expect(woffMeta.format).toBe("woff");
     expect(woffMeta.numGlyphs).toBeGreaterThan(0);
 

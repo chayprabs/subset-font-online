@@ -19,4 +19,12 @@ export default defineConfig({
     exclude: ["hb-subset-wasm", "woff2-encoder"],
   },
   assetsInclude: ["**/*.wasm"],
+  server: {
+    proxy: {
+      "/v1": {
+        target: "http://127.0.0.1:8080",
+        changeOrigin: true,
+      },
+    },
+  },
 });

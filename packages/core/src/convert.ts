@@ -12,6 +12,7 @@ const EXT: Record<FontFormat, string> = {
 export async function convert(
   input: ArrayBuffer,
   target: FontFormat,
+  basename = "font",
 ): Promise<ConvertResult> {
   const source = detectFormat(input);
   const sfnt = await toSfnt(input);
@@ -19,7 +20,7 @@ export async function convert(
     throw new Error("TTX/XML export requires the optional worker; choose TTF, OTF, WOFF, or WOFF2.");
   }
   const data = await fromSfnt(sfnt, target);
-  const base = source === "otf" ? "font" : "font";
+  const base = basename.replace(/\.[^.]+$/, "") || "font";
   return {
     data,
     format: target,

@@ -15,6 +15,7 @@ RUN pip install --no-cache-dir \
     "fonttools>=4.55.0" \
     "fontbakery>=0.12.0" \
     "opentype-sanitizer>=1.1.0" \
+    "brotli>=1.1.0" \
     && python -c "import shutil; assert shutil.which('fontbakery')"
 
 EXPOSE 8080

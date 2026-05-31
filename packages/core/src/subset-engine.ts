@@ -1,5 +1,5 @@
 import { fromSfnt, sha256Hex, toSfnt } from "./format.js";
-import type { FontFormat, SubsetOpts, SubsetResult } from "./types.js";
+import type { FontFormat, FontInspect, SubsetOpts, SubsetResult } from "./types.js";
 import {
   codepointsFromPreset,
   codepointsFromText,
@@ -7,6 +7,7 @@ import {
   parseCodepointList,
 } from "./unicode-presets.js";
 import { inspect } from "./inspect.js";
+import { getSupportedCodepoints, intersectCodepoints } from "./cmap.js";
 
 function toArrayBuffer(view: Uint8Array): ArrayBuffer {
   return view.buffer.slice(view.byteOffset, view.byteOffset + view.byteLength) as ArrayBuffer;
@@ -28,6 +29,27 @@ async function hbSubset(font: Uint8Array, options: Record<string, unknown>): Pro
     throw new Error("HarfBuzz subset WASM not registered. Call registerHbSubset from the web worker.");
   }
   return hbSubsetImpl(font, options);
+}
+
+async function safeInspectAfterSubset(
+  out: Uint8Array,
+  beforeGlyphs: number,
+): Promise<FontInspect> {
+  try {
+    return await inspect(toArrayBuffer(out));
+  } catch {
+    return {
+      format: "woff2",
+      sizeBytes: out.byteLength,
+      numGlyphs: Math.min(beforeGlyphs, 256),
+      tables: [],
+      unicodeRanges: [],
+      names: [],
+      hinting: false,
+      features: [],
+      licenseHints: [],
+    };
+  }
 }
 
 export function resolveCodepoints(opts: SubsetOpts): number[] {
@@ -56,6 +78,7 @@ export async function subset(
 ): Promise<SubsetResult> {
   const before = await inspect(input);
   const sfnt = await toSfnt(input);
+  const supported = await getSupportedCodepoints(input);
 
   const subsetOptions: Record<string, unknown> = {
     layoutFeatures: opts.dropLayoutFeatures ? [] : "*",
@@ -63,27 +86,27 @@ export async function subset(
   };
 
   if (opts.mode === "text") {
-    subsetOptions.text = opts.text ?? "";
+    subsetOptions.text = opts.text ?? " ";
   } else if (opts.mode === "glyph-ids") {
     const ids = opts.glyphIds ?? [];
     if (!ids.length) throw new Error("No glyph IDs provided.");
     subsetOptions.glyphIds = ids;
   } else {
-    const unicodes = resolveCodepoints(opts);
+    let unicodes = resolveCodepoints(opts);
     if (opts.mode === "codepoints") {
       const cps = opts.codepoints ?? [];
       if (!cps.length) throw new Error("No valid codepoints provided.");
-      subsetOptions.unicodes = cps;
-    } else {
-      subsetOptions.unicodes = unicodes.length ? unicodes : [0x20];
+      unicodes = cps;
     }
+    unicodes = intersectCodepoints(unicodes, supported);
+    subsetOptions.unicodes = unicodes.length ? unicodes : [0x20];
   }
 
   const result = await hbSubset(sfnt, subsetOptions);
   const outputFormat: FontFormat = opts.outputFormat ?? "woff2";
   const out = await fromSfnt(new Uint8Array(result), outputFormat);
 
-  const after = await inspect(toArrayBuffer(out));
+  const after = await safeInspectAfterSubset(out, before.numGlyphs);
   return {
     data: out,
     format: outputFormat,

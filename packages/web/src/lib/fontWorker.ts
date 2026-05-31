@@ -6,7 +6,7 @@ let worker: Worker | null = null;
 export type WorkerJob =
   | { type: "inspect"; buffer: ArrayBuffer }
   | { type: "subset"; buffer: ArrayBuffer; opts: SubsetOpts }
-  | { type: "convert"; buffer: ArrayBuffer; target: "ttf" | "otf" | "woff" | "woff2" }
+  | { type: "convert"; buffer: ArrayBuffer; target: "ttf" | "otf" | "woff" | "woff2"; basename?: string }
   | { type: "instance"; buffer: ArrayBuffer; axes: Record<string, number>; format?: "woff2" | "ttf" | "woff" };
 
 export type WorkerRequest = WorkerJob & { id: number };

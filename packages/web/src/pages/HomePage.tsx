@@ -48,6 +48,7 @@ export default function HomePage() {
   const [instanceResult, setInstanceResult] = useState<SubsetResult | null>(null);
   const [liveEstimate, setLiveEstimate] = useState<string | null>(null);
   const [specimenFontUrl, setSpecimenFontUrl] = useState<string | null>(null);
+  const [uploadFontUrl, setUploadFontUrl] = useState<string | null>(null);
   const [specimenText, setSpecimenText] = useState("The quick brown fox jumps over the lazy dog.");
   const [fontUrl, setFontUrl] = useState("");
   const [googleCssUrl, setGoogleCssUrl] = useState("");
@@ -176,6 +177,8 @@ export default function HomePage() {
     }
   };
 
+  const fileBasename = (file?.name ?? "font").replace(/\.[^.]+$/, "");
+
   const runConvert = async () => {
     if (!buffer) return;
     setLoading(true);
@@ -183,7 +186,7 @@ export default function HomePage() {
     try {
       const buf = buffer.slice(0);
       const res = await runFontJob(
-        { type: "convert", buffer: buf, target: convertTarget },
+        { type: "convert", buffer: buf, target: convertTarget, basename: fileBasename },
         [buf],
       );
       if (res.type === "convert") {
@@ -202,11 +205,12 @@ export default function HomePage() {
     setError(null);
     try {
       const zip = new JSZip();
-      const base = (file?.name ?? "font").replace(/\.[^.]+$/, "");
-      for (const fmt of batchFormats) {
+      const base = fileBasename;
+      const formats = [...new Set(batchFormats)];
+      for (const fmt of formats) {
         const buf = buffer.slice(0);
         const res = await runFontJob(
-          { type: "convert", buffer: buf, target: fmt as "woff2" | "woff" | "ttf" },
+          { type: "convert", buffer: buf, target: fmt as "woff2" | "woff" | "ttf", basename: base },
           [buf],
         );
         if (res.type === "convert") {
@@ -228,10 +232,7 @@ export default function HomePage() {
   };
 
   const runTtxExport = async () => {
-    if (!file || !qaOptIn) {
-      setError("TTX export uses the worker — opt in to server processing below.");
-      return;
-    }
+    if (!file || !qaOptIn) return;
     setLoading(true);
     try {
       const xml = await exportTtx(file);
@@ -290,19 +291,6 @@ export default function HomePage() {
     }
   };
 
-  const runBrowserShaping = async () => {
-    if (!specimenFontUrl) return;
-    setLoading(true);
-    try {
-      const results = await runShapingSmokeTest("SpecimenFont", specimenFontUrl);
-      setShapingResults(results);
-    } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
-    } finally {
-      setLoading(false);
-    }
-  };
-
   const loadSample = (url: string) => {
     void fetch(url)
       .then((r) => {
@@ -323,7 +311,12 @@ export default function HomePage() {
       const buf = await res.arrayBuffer();
       await loadBuffer(new File([buf], fontUrl.split("/").pop() ?? "font.woff2"));
     } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
+      const msg = e instanceof Error ? e.message : String(e);
+      setError(
+        msg.includes("fetch") || msg.includes("Failed")
+          ? `${msg} — cross-origin URLs need CORS headers on the host, or use a same-origin /samples link.`
+          : msg,
+      );
     } finally {
       setLoading(false);
     }
@@ -337,6 +330,9 @@ export default function HomePage() {
       const { fetchGoogleFontsCss } = await import("@fontops/core");
       const urls = await fetchGoogleFontsCss(googleCssUrl);
       if (!urls.length) throw new Error("No font URLs found in CSS");
+      if (urls.length > 1) {
+        setError(`Loaded first of ${urls.length} font files from CSS. Use URL load for a specific file if needed.`);
+      }
       const res = await fetch(urls[0]);
       if (!res.ok) throw new Error(`Font fetch failed: ${res.status}`);
       const buf = await res.arrayBuffer();
@@ -355,6 +351,7 @@ export default function HomePage() {
   };
 
   const previewFont = subsetResult ?? instanceResult;
+  const displayFontUrl = specimenFontUrl ?? uploadFontUrl;
 
   useEffect(() => {
     if (!previewFont) {
@@ -365,6 +362,29 @@ export default function HomePage() {
     setSpecimenFontUrl(url);
     return () => URL.revokeObjectURL(url);
   }, [previewFont]);
+
+  useEffect(() => {
+    if (!buffer) {
+      setUploadFontUrl(null);
+      return;
+    }
+    const url = URL.createObjectURL(new Blob([buffer]));
+    setUploadFontUrl(url);
+    return () => URL.revokeObjectURL(url);
+  }, [buffer]);
+
+  const runBrowserShaping = async () => {
+    if (!displayFontUrl) return;
+    setLoading(true);
+    try {
+      const results = await runShapingSmokeTest("SpecimenFont", displayFontUrl);
+      setShapingResults(results);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const savings =
     file && subsetResult
@@ -671,7 +691,9 @@ export default function HomePage() {
                     checked={batchFormats.includes(fmt)}
                     onChange={(e) => {
                       setBatchFormats((prev) =>
-                        e.target.checked ? [...prev, fmt] : prev.filter((f) => f !== fmt),
+                        e.target.checked
+                          ? [...new Set([...prev, fmt])]
+                          : prev.filter((f) => f !== fmt),
                       );
                     }}
                   />{" "}
@@ -685,8 +707,13 @@ export default function HomePage() {
             <p style={{ marginTop: "1rem", fontSize: "0.85rem", color: "var(--muted)" }}>
               TTX/XML export runs on the optional worker (opt in under QA tab).
             </p>
-            <button type="button" className="btn btn-secondary" disabled={!file || loading} onClick={() => void runTtxExport()}>
-              Export TTX (worker)
+            <button
+              type="button"
+              className="btn btn-secondary"
+              disabled={!file || !qaOptIn || loading}
+              onClick={() => void runTtxExport()}
+            >
+              Export TTX (worker, requires QA opt-in)
             </button>
           </>
         )}
@@ -804,45 +831,49 @@ export default function HomePage() {
               <label htmlFor="specimen">Preview text</label>
               <input id="specimen" value={specimenText} onChange={(e) => setSpecimenText(e.target.value)} />
             </div>
-            {specimenFontUrl && <style>{`@font-face { font-family: 'SpecimenFont'; src: url('${specimenFontUrl}'); }`}</style>}
-            <div style={{ fontFamily: specimenFontUrl ? "SpecimenFont, sans-serif" : "inherit", fontSize: "1.25rem", padding: "1rem", border: "1px solid var(--border)", borderRadius: 8 }}>
+            {displayFontUrl && <style>{`@font-face { font-family: 'SpecimenFont'; src: url('${displayFontUrl}'); }`}</style>}
+            <div style={{ fontFamily: displayFontUrl ? "SpecimenFont, sans-serif" : "inherit", fontSize: "1.25rem", padding: "1rem", border: "1px solid var(--border)", borderRadius: 8 }}>
               {specimenText}
             </div>
             <div className="specimen-grid">
               {[8, 12, 16, 24, 32, 48, 64, 96].map((px) => (
-                <div key={px} className="specimen-cell" style={{ fontSize: px, fontFamily: specimenFontUrl ? "SpecimenFont" : "inherit" }}>
+                <div key={px} className="specimen-cell" style={{ fontSize: px, fontFamily: displayFontUrl ? "SpecimenFont" : "inherit" }}>
                   <div style={{ fontSize: "0.7rem", color: "var(--muted)" }}>{px}px</div>
                   {specimenText.slice(0, 24)}
                 </div>
               ))}
             </div>
             <div style={{ marginTop: "1rem", display: "flex", gap: "0.5rem", flexWrap: "wrap" }}>
-              <button type="button" className="btn btn-secondary" disabled={!previewFont} onClick={() => void runBrowserShaping()}>
+              <button type="button" className="btn btn-secondary" disabled={!displayFontUrl} onClick={() => void runBrowserShaping()}>
                 Browser shaping smoke test
               </button>
               <button
                 type="button"
                 className="btn btn-secondary"
-                disabled={!previewFont}
+                disabled={!displayFontUrl}
                 onClick={() => {
-                  const canvas = document.createElement("canvas");
-                  canvas.width = 800;
-                  canvas.height = 200;
-                  const ctx = canvas.getContext("2d")!;
-                  ctx.fillStyle = "#fff";
-                  ctx.fillRect(0, 0, 800, 200);
-                  ctx.fillStyle = "#000";
-                  ctx.font = "48px SpecimenFont, sans-serif";
-                  ctx.fillText(specimenText, 20, 100);
-                  canvas.toBlob((b) => {
-                    if (!b) return;
-                    const url = URL.createObjectURL(b);
-                    const a = document.createElement("a");
-                    a.href = url;
-                    a.download = "specimen.png";
-                    a.click();
-                    URL.revokeObjectURL(url);
-                  });
+                  void (async () => {
+                    if (!displayFontUrl) return;
+                    await document.fonts.load('48px "SpecimenFont"');
+                    const canvas = document.createElement("canvas");
+                    canvas.width = 800;
+                    canvas.height = 200;
+                    const ctx = canvas.getContext("2d")!;
+                    ctx.fillStyle = "#fff";
+                    ctx.fillRect(0, 0, 800, 200);
+                    ctx.fillStyle = "#000";
+                    ctx.font = '48px "SpecimenFont", sans-serif';
+                    ctx.fillText(specimenText, 20, 100);
+                    canvas.toBlob((b) => {
+                      if (!b) return;
+                      const url = URL.createObjectURL(b);
+                      const a = document.createElement("a");
+                      a.href = url;
+                      a.download = "specimen.png";
+                      a.click();
+                      URL.revokeObjectURL(url);
+                    });
+                  })();
                 }}
               >
                 Export PNG
@@ -850,9 +881,16 @@ export default function HomePage() {
               <button
                 type="button"
                 className="btn btn-secondary"
-                disabled={!previewFont || !specimenFontUrl}
-                onClick={() => {
-                  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="800" height="200"><text x="20" y="100" font-size="48" font-family="SpecimenFont">${specimenText.replace(/&/g, "&amp;").replace(/</g, "&lt;")}</text></svg>`;
+                disabled={!displayFontUrl}
+                onClick={async () => {
+                  if (!displayFontUrl) return;
+                  const res = await fetch(displayFontUrl);
+                  const bytes = new Uint8Array(await res.arrayBuffer());
+                  let binary = "";
+                  for (let i = 0; i < bytes.length; i++) binary += String.fromCharCode(bytes[i]);
+                  const b64 = btoa(binary);
+                  const safe = specimenText.replace(/&/g, "&amp;").replace(/</g, "&lt;");
+                  const svg = `<?xml version="1.0"?><svg xmlns="http://www.w3.org/2000/svg" width="800" height="200"><defs><style>@font-face{font-family:'SpecimenFont';src:url(data:font/woff2;base64,${b64}) format('woff2');}</style></defs><text x="20" y="100" font-size="48" font-family="SpecimenFont">${safe}</text></svg>`;
                   const blob = new Blob([svg], { type: "image/svg+xml" });
                   const url = URL.createObjectURL(blob);
                   const a = document.createElement("a");
