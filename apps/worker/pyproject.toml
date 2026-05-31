@@ -1,0 +1,16 @@
+[project]
+name = "fontops-worker"
+version = "1.0.0"
+description = "FontBakery QA worker for FontOps"
+requires-python = ">=3.12"
+dependencies = [
+  "fastapi>=0.115.0",
+  "uvicorn[standard]>=0.32.0",
+  "python-multipart>=0.0.12",
+]
+
+[project.optional-dependencies]
+qa = ["fonttools>=4.55.0"]
+
+[tool.uv]
+dev-dependencies = []

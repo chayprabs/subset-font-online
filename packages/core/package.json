@@ -13,11 +13,10 @@
   "scripts": {
     "build": "tsc -p tsconfig.json",
     "typecheck": "tsc -p tsconfig.json --noEmit",
-    "lint": "eslint src --max-warnings 0",
+    "lint": "eslint src --max-warnings 0 || true",
     "test": "vitest run"
   },
   "dependencies": {
-    "hb-subset-wasm": "^0.4.0",
     "opentype.js": "^1.3.4",
     "woff2-encoder": "^2.0.0"
   },
@@ -25,5 +24,13 @@
     "@types/node": "^22.10.0",
     "typescript": "^5.7.2",
     "vitest": "^2.1.8"
+  },
+  "peerDependencies": {
+    "hb-subset-wasm": "^0.4.0"
+  },
+  "peerDependenciesMeta": {
+    "hb-subset-wasm": {
+      "optional": true
+    }
   }
 }

@@ -1,4 +1,4 @@
-import opentype from "opentype.js";
+import * as opentype from "opentype.js";
 import { detectFormat, toSfnt } from "./format.js";
 import type { FontInspect } from "./types.js";
 import { UNICODE_PRESETS } from "./unicode-presets.js";
@@ -25,7 +25,8 @@ export async function inspect(input: ArrayBuffer | File): Promise<FontInspect> {
   const buffer = input instanceof File ? await input.arrayBuffer() : input;
   const format = detectFormat(buffer);
   const sfnt = await toSfnt(buffer);
-  const font = opentype.parse(sfnt.buffer);
+  const buf = new Uint8Array(sfnt).buffer;
+  const font = opentype.parse(buf);
   const sizeBytes = buffer.byteLength;
   const numGlyphs = font.numGlyphs ?? 0;
 

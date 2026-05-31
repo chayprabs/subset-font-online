@@ -39,7 +39,8 @@ export function parseCodepointList(input: string): number[] {
         for (let cp = a; cp <= b; cp++) set.add(cp);
       }
     } else {
-      const cp = parseInt(part.replace(/^U\+/i, ""), part.startsWith("0x") ? 16 : 10);
+      const cleaned = part.replace(/^U\+/i, "");
+      const cp = parseInt(cleaned, part.startsWith("0x") || /^[0-9a-fA-F]+$/.test(cleaned) ? 16 : 10);
       if (!Number.isNaN(cp)) set.add(cp);
     }
   }

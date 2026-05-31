@@ -1,4 +1,3 @@
-import { subset as hbSubset } from "hb-subset-wasm";
 import { fromSfnt, sha256Hex, toSfnt } from "./format.js";
 import type { FontFormat, SubsetOpts, SubsetResult } from "./types.js";
 import {
@@ -9,13 +8,26 @@ import {
 } from "./unicode-presets.js";
 import { inspect } from "./inspect.js";
 
-let hbReady: Promise<void> | null = null;
+function toArrayBuffer(view: Uint8Array): ArrayBuffer {
+  return view.buffer.slice(view.byteOffset, view.byteOffset + view.byteLength) as ArrayBuffer;
+}
 
-export async function ensureHbSubset(): Promise<void> {
-  if (!hbReady) {
-    hbReady = Promise.resolve();
+export type HbSubsetFn = (
+  font: Uint8Array,
+  options: Record<string, unknown>,
+) => Promise<Uint8Array>;
+
+let hbSubsetImpl: HbSubsetFn | null = null;
+
+export function registerHbSubset(fn: HbSubsetFn): void {
+  hbSubsetImpl = fn;
+}
+
+async function hbSubset(font: Uint8Array, options: Record<string, unknown>): Promise<Uint8Array> {
+  if (!hbSubsetImpl) {
+    throw new Error("HarfBuzz subset WASM not registered. Call registerHbSubset from the web worker.");
   }
-  await hbReady;
+  return hbSubsetImpl(font, options);
 }
 
 export function resolveCodepoints(opts: SubsetOpts): number[] {
@@ -32,7 +44,7 @@ export function resolveCodepoints(opts: SubsetOpts): number[] {
       return codepointsFromPreset(preset);
     }
     case "glyph-ids":
-      return opts.glyphIds ?? [];
+      return [];
     default:
       return [];
   }
@@ -42,33 +54,32 @@ export async function subset(
   input: ArrayBuffer,
   opts: SubsetOpts,
 ): Promise<SubsetResult> {
-  await ensureHbSubset();
   const before = await inspect(input);
   const sfnt = await toSfnt(input);
-  let unicodes = resolveCodepoints(opts);
 
-  if (opts.mode === "glyph-ids" && opts.glyphIds?.length) {
-    unicodes = opts.glyphIds;
-  }
-
-  if (unicodes.length === 0) {
-    unicodes = [0x20, 0x2e];
-  }
-
-  const subsetOptions: Parameters<typeof hbSubset>[1] = {
-    unicodes,
-    layoutFeatures: opts.dropLayoutFeatures ? [] : ["*"],
+  const subsetOptions: Record<string, unknown> = {
+    layoutFeatures: opts.dropLayoutFeatures ? undefined : "*",
+    noHinting: opts.dropHinting,
   };
 
-  if (opts.dropHinting) {
-    subsetOptions.dropTables = ["prep", "fpgm", "cvt ", "hdmx", "VDMX"];
+  if (opts.mode === "text") {
+    subsetOptions.text = opts.text ?? "";
+  } else if (opts.mode === "glyph-ids" && opts.glyphIds?.length) {
+    subsetOptions.glyphIds = opts.glyphIds;
+  } else {
+    const unicodes = resolveCodepoints(opts);
+    if (opts.mode === "codepoints" && opts.codepoints) {
+      subsetOptions.unicodes = opts.codepoints;
+    } else {
+      subsetOptions.unicodes = unicodes.length ? unicodes : [0x20];
+    }
   }
 
   const result = await hbSubset(sfnt, subsetOptions);
   const outputFormat: FontFormat = opts.outputFormat ?? "woff2";
   const out = await fromSfnt(new Uint8Array(result), outputFormat);
 
-  const after = await inspect(out.buffer);
+  const after = await inspect(toArrayBuffer(out));
   return {
     data: out,
     format: outputFormat,
