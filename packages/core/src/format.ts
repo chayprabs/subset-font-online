@@ -43,15 +43,34 @@ export async function fromSfnt(
   throw new Error("TTX export requires the server worker endpoint /v1/ttx");
 }
 
+function sfntDirectoryFields(numTables: number): {
+  searchRange: number;
+  entrySelector: number;
+  rangeShift: number;
+} {
+  const entrySelector = numTables > 0 ? Math.floor(Math.log2(numTables)) : 0;
+  const searchRange = (1 << entrySelector) * 16;
+  return {
+    searchRange,
+    entrySelector,
+    rangeShift: numTables * 16 - searchRange,
+  };
+}
+
 function decodeWoff(data: Uint8Array): Uint8Array {
   const view = new DataView(data.buffer, data.byteOffset, data.byteLength);
   if (data.byteLength < 44) throw new Error("Invalid WOFF file");
+  const flavor = view.getUint32(4);
   const numTables = view.getUint16(12);
   const totalSfntSize = view.getUint32(16);
   const out = new Uint8Array(totalSfntSize);
   const outView = new DataView(out.buffer);
-  out.set(data.subarray(0, 12));
-  outView.setUint32(8, numTables * 16 + 12);
+  outView.setUint32(0, flavor);
+  outView.setUint16(4, numTables);
+  const dir = sfntDirectoryFields(numTables);
+  outView.setUint16(6, dir.searchRange);
+  outView.setUint16(8, dir.entrySelector);
+  outView.setUint16(10, dir.rangeShift);
   let sfntOffset = 12 + numTables * 16;
   for (let i = 0; i < numTables; i++) {
     const entry = 44 + i * 20;
@@ -109,8 +128,10 @@ function encodeWoff(sfnt: Uint8Array): Uint8Array {
   const out = new Uint8Array(totalSize);
   const outView = new DataView(out.buffer);
   out.set(new TextEncoder().encode("wOFF"));
-  outView.setUint32(4, sfnt.byteLength);
+  outView.setUint32(4, view.getUint32(0));
+  outView.setUint32(8, totalSize);
   outView.setUint16(12, numTables);
+  outView.setUint16(14, 0);
   outView.setUint32(16, sfnt.byteLength);
 
   let dataOffset = headerSize;
