@@ -60,6 +60,7 @@ export default function HomePage() {
   const [shapingResults, setShapingResults] = useState<Awaited<ReturnType<typeof runShapingSmokeTest>> | null>(null);
   const [serverShaping, setServerShaping] = useState<Awaited<ReturnType<typeof runServerShaping>> | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
+  const loadGeneration = useRef(0);
 
   const loadBuffer = useCallback(async (f: File) => {
     setError(null);
@@ -73,6 +74,7 @@ export default function HomePage() {
     setQaReport(null);
     setShapingResults(null);
     setServerShaping(null);
+    const gen = ++loadGeneration.current;
     try {
       setLoading(true);
       const inspectBuf = buf.slice(0);
@@ -80,6 +82,7 @@ export default function HomePage() {
         { type: "inspect", buffer: inspectBuf },
         [inspectBuf],
       );
+      if (gen !== loadGeneration.current) return;
       if (res.type === "inspect") {
         setInspectData(res.result);
         if (res.result.variableAxes?.length) {
@@ -91,9 +94,10 @@ export default function HomePage() {
         }
       }
     } catch (e) {
+      if (gen !== loadGeneration.current) return;
       setError(e instanceof Error ? e.message : String(e));
     } finally {
-      setLoading(false);
+      if (gen === loadGeneration.current) setLoading(false);
     }
   }, []);
 
@@ -102,6 +106,7 @@ export default function HomePage() {
       setLiveEstimate(null);
       return;
     }
+    const gen = loadGeneration.current;
     void (async () => {
       try {
         const buf = buffer.slice(0);
@@ -119,13 +124,14 @@ export default function HomePage() {
           },
           [buf],
         );
+        if (gen !== loadGeneration.current) return;
         if (res.type === "subset" && file) {
           setLiveEstimate(
             `Live estimate: ${formatBytes(file.size)} → ${formatBytes(res.result.sizeBytes)}`,
           );
         }
       } catch {
-        setLiveEstimate(null);
+        if (gen === loadGeneration.current) setLiveEstimate(null);
       }
     })();
   }, [subsetText, buffer, dropHinting, dropLayout, file], 450);
@@ -143,6 +149,7 @@ export default function HomePage() {
     mode: "text" | "codepoints" | "unicode-range" | "language-pack" | "glyph-ids",
   ) => {
     if (!buffer) return;
+    const gen = loadGeneration.current;
     setLoading(true);
     setError(null);
     try {
@@ -168,19 +175,23 @@ export default function HomePage() {
         },
         [buf],
       );
-      if (res.type === "subset") setSubsetResult(res.result);
-      else throw new Error(`Unexpected response: ${(res as { type: string }).type}`);
+      if (gen !== loadGeneration.current) return;
+      if (res.type === "subset") {
+        setSubsetResult(res.result);
+        setInstanceResult(null);
+      } else throw new Error(`Unexpected response: ${(res as { type: string }).type}`);
     } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
+      if (gen === loadGeneration.current) setError(e instanceof Error ? e.message : String(e));
     } finally {
-      setLoading(false);
+      if (gen === loadGeneration.current) setLoading(false);
     }
   };
 
-  const fileBasename = (file?.name ?? "font").replace(/\.[^.]+$/, "");
+  const fileBasename = (file?.name ?? "font").replace(/\.(woff2|woff|ttf|otf|ttc)$/i, "");
 
   const runConvert = async () => {
     if (!buffer) return;
+    const gen = loadGeneration.current;
     setLoading(true);
     setError(null);
     try {
@@ -189,18 +200,20 @@ export default function HomePage() {
         { type: "convert", buffer: buf, target: convertTarget, basename: fileBasename },
         [buf],
       );
+      if (gen !== loadGeneration.current) return;
       if (res.type === "convert") {
         downloadBytes(res.result.data, res.result.suggestedFilename);
       } else throw new Error(`Unexpected response`);
     } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
+      if (gen === loadGeneration.current) setError(e instanceof Error ? e.message : String(e));
     } finally {
-      setLoading(false);
+      if (gen === loadGeneration.current) setLoading(false);
     }
   };
 
   const runBatchConvert = async () => {
     if (!buffer) return;
+    const gen = loadGeneration.current;
     setLoading(true);
     setError(null);
     try {
@@ -225,9 +238,9 @@ export default function HomePage() {
       a.click();
       URL.revokeObjectURL(url);
     } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
+      if (gen === loadGeneration.current) setError(e instanceof Error ? e.message : String(e));
     } finally {
-      setLoading(false);
+      if (gen === loadGeneration.current) setLoading(false);
     }
   };
 
@@ -252,6 +265,8 @@ export default function HomePage() {
 
   const runInstance = async () => {
     if (!buffer || !inspectData?.variableAxes?.length) return;
+    const gen = loadGeneration.current;
+    setInstanceResult(null);
     setLoading(true);
     setError(null);
     try {
@@ -266,12 +281,15 @@ export default function HomePage() {
         { type: "instance", buffer: buf, axes, format: "woff2" },
         [buf],
       );
-      if (res.type === "instance") setInstanceResult(res.result);
-      else throw new Error(`Unexpected response`);
+      if (gen !== loadGeneration.current) return;
+      if (res.type === "instance") {
+        setInstanceResult(res.result);
+        setSubsetResult(null);
+      } else throw new Error(`Unexpected response`);
     } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
+      if (gen === loadGeneration.current) setError(e instanceof Error ? e.message : String(e));
     } finally {
-      setLoading(false);
+      if (gen === loadGeneration.current) setLoading(false);
     }
   };
 
@@ -350,7 +368,8 @@ export default function HomePage() {
     alert("Local history cleared.");
   };
 
-  const previewFont = subsetResult ?? instanceResult;
+  const previewFont = instanceResult ?? subsetResult;
+  const specimenEmbedFormat = previewFont?.format ?? inspectData?.format ?? "woff2";
   const displayFontUrl = specimenFontUrl ?? uploadFontUrl;
 
   useEffect(() => {
@@ -482,6 +501,7 @@ export default function HomePage() {
 
       <div className="panel">
         {tab === "inspect" && !buffer && <p>Upload a font to inspect tables and coverage.</p>}
+        {tab === "inspect" && buffer && !inspectData && loading && <p>Inspecting font…</p>}
         {tab === "inspect" && inspectData && (
           <>
             <label>
@@ -729,7 +749,10 @@ export default function HomePage() {
                     type="button"
                     className="btn btn-secondary"
                     style={{ margin: "0.25rem" }}
-                    onClick={() => setAxisValues({ ...inst.values })}
+                    onClick={() => {
+                      setAxisValues({ ...inst.values });
+                      setInstanceResult(null);
+                    }}
                   >
                     {inst.name}
                   </button>
@@ -745,9 +768,12 @@ export default function HomePage() {
                   type="range"
                   min={ax.min}
                   max={ax.max}
-                  step={(ax.max - ax.min) / 100}
+                  step={ax.max === ax.min ? 1 : Math.max(1, (ax.max - ax.min) / 100)}
                   value={axisValues[ax.tag] ?? ax.default}
-                  onChange={(e) => setAxisValues({ ...axisValues, [ax.tag]: Number(e.target.value) })}
+                  onChange={(e) => {
+                    setAxisValues({ ...axisValues, [ax.tag]: Number(e.target.value) });
+                    setInstanceResult(null);
+                  }}
                 />
               </div>
             ))}
@@ -761,7 +787,11 @@ export default function HomePage() {
             )}
           </>
         )}
-        {tab === "instance" && !inspectData?.variableAxes && <p>Upload a variable font (e.g. Inter Variable sample).</p>}
+        {tab === "instance" && buffer && !inspectData && loading && <p>Inspecting font…</p>}
+        {tab === "instance" && buffer && inspectData && !inspectData.variableAxes?.length && (
+          <p>Upload a variable font (e.g. Inter Variable sample).</p>
+        )}
+        {tab === "instance" && !buffer && <p>Upload a variable font (e.g. Inter Variable sample).</p>}
 
         {tab === "qa" && (
           <>
@@ -889,8 +919,20 @@ export default function HomePage() {
                   let binary = "";
                   for (let i = 0; i < bytes.length; i++) binary += String.fromCharCode(bytes[i]);
                   const b64 = btoa(binary);
-                  const safe = specimenText.replace(/&/g, "&amp;").replace(/</g, "&lt;");
-                  const svg = `<?xml version="1.0"?><svg xmlns="http://www.w3.org/2000/svg" width="800" height="200"><defs><style>@font-face{font-family:'SpecimenFont';src:url(data:font/woff2;base64,${b64}) format('woff2');}</style></defs><text x="20" y="100" font-size="48" font-family="SpecimenFont">${safe}</text></svg>`;
+                  const safe = specimenText
+                    .replace(/&/g, "&amp;")
+                    .replace(/</g, "&lt;")
+                    .replace(/"/g, "&quot;");
+                  const fmt = specimenEmbedFormat;
+                  const mime =
+                    fmt === "woff"
+                      ? "font/woff"
+                      : fmt === "ttf"
+                        ? "font/ttf"
+                        : fmt === "otf"
+                          ? "font/otf"
+                          : "font/woff2";
+                  const svg = `<?xml version="1.0"?><svg xmlns="http://www.w3.org/2000/svg" width="800" height="200"><defs><style>@font-face{font-family:'SpecimenFont';src:url(data:${mime};base64,${b64}) format('${fmt}');}</style></defs><text x="20" y="100" font-size="48" font-family="SpecimenFont">${safe}</text></svg>`;
                   const blob = new Blob([svg], { type: "image/svg+xml" });
                   const url = URL.createObjectURL(blob);
                   const a = document.createElement("a");

@@ -18,6 +18,8 @@ export interface ShapingResult {
   message: string;
 }
 
+let loadedSpecimenFace: FontFace | null = null;
+
 export async function runShapingSmokeTest(
   fontFamily: string,
   fontUrl: string,
@@ -43,11 +45,16 @@ export async function runShapingSmokeTest(
 
 function loadFontFace(family: string, url: string): Promise<void> {
   return new Promise((resolve, reject) => {
+    if (loadedSpecimenFace) {
+      document.fonts.delete(loadedSpecimenFace);
+      loadedSpecimenFace = null;
+    }
     const face = new FontFace(family, `url(${url})`);
     face
       .load()
       .then((loaded) => {
         document.fonts.add(loaded);
+        loadedSpecimenFace = loaded;
         resolve();
       })
       .catch(reject);

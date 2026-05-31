@@ -2,6 +2,7 @@ import * as opentype from "opentype.js";
 import { detectFormat, toSfnt } from "./format.js";
 import type { FontInspect } from "./types.js";
 import { UNICODE_PRESETS } from "./unicode-presets.js";
+import { collectCodepointsFromFont } from "./cmap.js";
 
 const TABLE_TAGS = [
   "cmap",
@@ -54,14 +55,7 @@ export async function inspect(input: ArrayBuffer | File): Promise<FontInspect> {
     );
   }
 
-  const supported = new Set<number>();
-  const glyphList = font.glyphs?.glyphs;
-  if (glyphList) {
-    const iter = Array.isArray(glyphList) ? glyphList : Object.values(glyphList as Record<string, { unicode?: number }>);
-    for (const g of iter) {
-      if (g?.unicode !== undefined) supported.add(g.unicode);
-    }
-  }
+  const supported = collectCodepointsFromFont(font);
 
   const unicodeRanges = Object.entries(UNICODE_PRESETS).map(([name, ranges]) => {
     let total = 0;

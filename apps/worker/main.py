@@ -32,6 +32,32 @@ app.add_middleware(
 )
 
 MAX_UPLOAD = 50_000_000
+VALID_QA_PROFILES = frozenset({"googlefonts", "universal"})
+
+
+async def read_upload(file: UploadFile) -> bytes:
+    data = await file.read()
+    if not data:
+        raise HTTPException(status_code=400, detail="Empty file")
+    if len(data) > MAX_UPLOAD:
+        raise HTTPException(status_code=413, detail="File too large (max 50MB)")
+    return data
+
+
+def run_checked(cmd: list[str], timeout: int) -> subprocess.CompletedProcess[str]:
+    try:
+        return subprocess.run(
+            cmd,
+            capture_output=True,
+            text=True,
+            timeout=timeout,
+            check=False,
+        )
+    except subprocess.TimeoutExpired as exc:
+        raise HTTPException(
+            status_code=504,
+            detail=f"Command timed out after {timeout}s: {' '.join(cmd[:2])}",
+        ) from exc
 
 
 class CheckStatus(str, Enum):
@@ -94,12 +120,15 @@ async def qa(
     file: UploadFile = File(...),
     profile: str = Form("googlefonts"),
 ) -> QAReport:
+    if profile not in VALID_QA_PROFILES:
+        raise HTTPException(
+            status_code=422,
+            detail=f"Invalid profile. Use one of: {', '.join(sorted(VALID_QA_PROFILES))}",
+        )
     checks: list[CheckItem] = []
     with tempfile.TemporaryDirectory(prefix="fontops-") as tmp:
         dest = safe_dest(tmp, file.filename)
-        data = await file.read()
-        if len(data) > MAX_UPLOAD:
-            raise HTTPException(status_code=413, detail="File too large (max 50MB)")
+        data = await read_upload(file)
         dest.write_bytes(data)
 
         checks.append(
@@ -114,13 +143,7 @@ async def qa(
 
         ots = resolve_ots_binary()
         if ots:
-            proc = subprocess.run(
-                [ots, str(dest)],
-                capture_output=True,
-                text=True,
-                timeout=90,
-                check=False,
-            )
+            proc = run_checked([ots, str(dest)], timeout=90)
             checks.append(
                 CheckItem(
                     id="ots-sanitize",
@@ -156,20 +179,17 @@ async def qa(
             )
 
         fb = shutil.which("fontbakery")
-        profile_flag = "googlefonts" if profile == "googlefonts" else "universal"
+        profile_flag = profile
         if fb:
-            proc = subprocess.run(
+            proc = run_checked(
                 [fb, f"check-{profile_flag}", str(dest), "-c", "family/win_ascent_and_descent"],
-                capture_output=True,
-                text=True,
                 timeout=180,
-                check=False,
             )
             checks.append(
                 CheckItem(
                     id="fontbakery",
-                    status=CheckStatus.PASS if proc.returncode == 0 else CheckStatus.WARN,
-                    message=(proc.stdout or proc.stderr or "")[:800],
+                    status=CheckStatus.PASS if proc.returncode == 0 else CheckStatus.FAIL,
+                    message=((proc.stderr or "") + (proc.stdout or ""))[:800],
                 )
             )
         else:
@@ -188,9 +208,7 @@ async def qa(
 async def export_ttx(file: UploadFile = File(...)) -> PlainTextResponse:
     with tempfile.TemporaryDirectory(prefix="fontops-") as tmp:
         dest = safe_dest(tmp, file.filename)
-        data = await file.read()
-        if len(data) > MAX_UPLOAD:
-            raise HTTPException(status_code=413, detail="File too large")
+        data = await read_upload(file)
         dest.write_bytes(data)
         try:
             from fontTools.ttLib import TTFont
@@ -217,9 +235,7 @@ async def shaping_check(file: UploadFile = File(...)) -> list[ShapingItem]:
     ]
     with tempfile.TemporaryDirectory(prefix="fontops-") as tmp:
         dest = safe_dest(tmp, file.filename)
-        data = await file.read()
-        if len(data) > MAX_UPLOAD:
-            raise HTTPException(status_code=413, detail="File too large")
+        data = await read_upload(file)
         dest.write_bytes(data)
         try:
             from fontTools.ttLib import TTFont

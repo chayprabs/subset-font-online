@@ -79,21 +79,35 @@ describe.skipIf(!process.env.RUN_ACCEPTANCE)("integration: samples inspect + sub
       });
 
       it("subset by language pack CJK Common", async () => {
-        const result = await subset(buffer, {
-          mode: "language-pack",
+        const meta = await inspect(buffer);
+        const cjk = meta.unicodeRanges.find((r) => r.name === "CJK Common");
+        const opts = {
+          mode: "language-pack" as const,
           languagePack: "CJK Common",
-          outputFormat: "woff2",
-        });
+          outputFormat: "woff2" as const,
+        };
+        if (!cjk?.supported) {
+          await expect(subset(buffer, opts)).rejects.toThrow(/cmap/i);
+          return;
+        }
+        const result = await subset(buffer, opts);
         assertValidOutput(result.data, "woff2");
         expect(result.retainedGlyphs).toBeGreaterThan(0);
       });
 
       it("subset by unicode-range CJK Common", async () => {
-        const result = await subset(buffer, {
-          mode: "unicode-range",
+        const meta = await inspect(buffer);
+        const cjk = meta.unicodeRanges.find((r) => r.name === "CJK Common");
+        const opts = {
+          mode: "unicode-range" as const,
           unicodeRange: "CJK Common",
-          outputFormat: "woff2",
-        });
+          outputFormat: "woff2" as const,
+        };
+        if (!cjk?.supported) {
+          await expect(subset(buffer, opts)).rejects.toThrow(/cmap/i);
+          return;
+        }
+        const result = await subset(buffer, opts);
         assertValidOutput(result.data, "woff2");
         expect(result.retainedGlyphs).toBeGreaterThan(0);
       });
@@ -105,6 +119,22 @@ describe.skipIf(!process.env.RUN_ACCEPTANCE)("integration: samples inspect + sub
       });
     });
   }
+
+  it("rejects CJK preset when font has no matching cmap", async () => {
+    const woff2Path = join(samplesDir, "Inter-Regular.woff2");
+    const font = readFileSync(woff2Path);
+    const buf = font.buffer.slice(font.byteOffset, font.byteOffset + font.byteLength);
+    await expect(
+      subset(buf, { mode: "unicode-range", unicodeRange: "CJK Common", outputFormat: "woff2" }),
+    ).rejects.toThrow(/cmap/i);
+  });
+
+  it("rejects empty subset text", async () => {
+    const woff2Path = join(samplesDir, "Inter-Regular.woff2");
+    const font = readFileSync(woff2Path);
+    const buf = font.buffer.slice(font.byteOffset, font.byteOffset + font.byteLength);
+    await expect(subset(buf, { mode: "text", text: "", outputFormat: "woff2" })).rejects.toThrow(/empty/i);
+  });
 
   it("inspect/converts TTF and WOFF derived from WOFF2 sample", async () => {
     const woff2Path = join(samplesDir, "Inter-Regular.woff2");
