@@ -17,7 +17,7 @@
     "test": "vitest run"
   },
   "dependencies": {
-    "opentype.js": "^1.3.4",
+    "opentype.js": "^2.0.0",
     "pako": "^2.1.0",
     "woff2-encoder": "^2.0.0"
   },
