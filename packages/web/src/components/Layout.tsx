@@ -38,6 +38,7 @@ export default function Layout() {
       <footer className="footer">
         <Link to="/privacy">Privacy Policy</Link>
         <Link to="/terms">Terms &amp; Conditions</Link>
+        <Link to="/legal-notice">Legal Notice</Link>
       </footer>
     </>
   );

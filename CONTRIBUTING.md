@@ -14,7 +14,25 @@ Thank you for your interest in contributing.
 - Run `pnpm typecheck` and `pnpm test` before submitting
 - Use conventional commit messages
 - Keep browser processing local; document any new network calls
+- Do not commit fonts or other materials you are not licensed to redistribute
 
-## License
+## Contributor license agreement
 
-By contributing, you agree that your contributions are licensed under the same terms as the project (MIT for web/core, AGPL for worker changes).
+By submitting a pull request, issue comment, or other contribution to this repository, you represent that:
+
+1. You have the right to submit the contribution;
+2. Your contribution is your original work or you have permission to submit it under the licenses below;
+3. You grant permission to use your contribution under the same licenses as the project.
+
+**License mapping:**
+
+| Path | License |
+|------|---------|
+| `packages/core`, `packages/web`, root docs (except worker) | MIT |
+| `apps/worker` | GNU AGPL v3 |
+
+You agree to the [Terms](/terms) and [Legal Notice](/legal-notice) when using hosted deployments maintained by the project operator.
+
+## Code of conduct
+
+See [CODE_OF_CONDUCT.md](./CODE_OF_CONDUCT.md).

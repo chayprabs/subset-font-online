@@ -15,3 +15,11 @@ GNU Affero General Public License for more details.
 
 You should have received a copy of the GNU Affero General Public License
 along with this program. If not, see <https://www.gnu.org/licenses/>.
+
+---
+
+Service terms, privacy policy, and legal notices for FontOps are in the
+repository root LEGAL.md and the web application routes /terms, /privacy,
+and /legal-notice. AGPL obligations apply to distribution and network use
+of this worker component; they do not supersede those service terms where
+applicable.

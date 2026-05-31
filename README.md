@@ -50,12 +50,18 @@ apps/worker/       FastAPI — QA, TTX, shaping (AGPL-3.0)
 | A2 | Variable instance wght=600 | same |
 | A3 | WOFF2 round-trip | same |
 
-## License
+## License & legal
 
-- **MIT** — `packages/core`, `packages/web`
-- **AGPL-3.0** — `apps/worker`
+| Component | License |
+|-----------|---------|
+| `packages/core`, `packages/web` | [MIT](./LICENSE) |
+| `apps/worker` | [AGPL-3.0](./apps/worker/LICENSE) |
+| Third-party | [NOTICE.md](./NOTICE.md) |
+
+**Policies (hosted site):** [Privacy](/privacy) · [Terms](/terms) · [Legal Notice](/legal-notice)
+
+See [LEGAL.md](./LEGAL.md) for an overview. The MIT/AGPL licenses govern **software**; they do **not** grant rights to fonts you process. You are responsible for font licensing and compliance.
 
 ## Links
 
 - Maintainer: [@chayprabs](https://x.com/chayprabs) · [chaitanyaprabuddha.com](https://www.chaitanyaprabuddha.com)
-- [Privacy](/privacy) · [Terms](/terms) (on deployed site)

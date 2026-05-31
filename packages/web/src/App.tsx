@@ -1,6 +1,7 @@
 import { Route, Routes } from "react-router-dom";
 import Layout from "./components/Layout";
 import HomePage from "./pages/HomePage";
+import LegalNoticePage from "./pages/LegalNoticePage";
 import PrivacyPage from "./pages/PrivacyPage";
 import TermsPage from "./pages/TermsPage";
 import SeoLandingPage from "./pages/SeoLandingPage";
@@ -12,6 +13,7 @@ export default function App() {
         <Route path="/" element={<HomePage />} />
         <Route path="/privacy" element={<PrivacyPage />} />
         <Route path="/terms" element={<TermsPage />} />
+        <Route path="/legal-notice" element={<LegalNoticePage />} />
         <Route path="/font-subset-online" element={<SeoLandingPage slug="font-subset-online" />} />
         <Route path="/woff2-converter" element={<SeoLandingPage slug="woff2-converter" />} />
         <Route path="/variable-font-instance" element={<SeoLandingPage slug="variable-font-instance" />} />

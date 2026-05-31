@@ -6,11 +6,13 @@ test("home page loads with FontOps branding", async ({ page }) => {
   await expect(page.getByText(/Subset, convert and QA/i)).toBeVisible();
 });
 
-test("privacy and terms pages", async ({ page }) => {
+test("privacy, terms, and legal notice pages", async ({ page }) => {
   await page.goto("/privacy");
   await expect(page.getByRole("heading", { name: /Privacy Policy/i })).toBeVisible();
   await page.goto("/terms");
   await expect(page.getByRole("heading", { name: /Terms/i })).toBeVisible();
+  await page.goto("/legal-notice");
+  await expect(page.getByRole("heading", { name: /Legal Notice/i })).toBeVisible();
 });
 
 test("seo landing routes", async ({ page }) => {

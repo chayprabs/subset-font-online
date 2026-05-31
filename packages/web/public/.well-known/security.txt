@@ -1,4 +1,6 @@
+Contact: mailto:legal@chaitanyaprabuddha.com
 Contact: https://www.chaitanyaprabuddha.com
 Expires: 2027-12-31T23:59:59.000Z
 Preferred-Languages: en
 Canonical: https://github.com/chayprabs/subset-font-online/security/policy
+Policy: https://github.com/chayprabs/subset-font-online/blob/main/SECURITY.md
