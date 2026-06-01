@@ -34,7 +34,7 @@ describe.skipIf(!process.env.RUN_ACCEPTANCE)("integration: samples inspect + sub
     registerHbSubset(fn);
   });
 
-  const sampleFiles = readdirSync(samplesDir).filter((f) => /\.(woff2?|ttf|otf)$/i.test(f));
+  const sampleFiles = readdirSync(samplesDir).filter((f: string) => /\.(woff2?|ttf|otf)$/i.test(f));
 
   for (const file of sampleFiles) {
     describe(file, () => {

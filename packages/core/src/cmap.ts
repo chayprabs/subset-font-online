@@ -10,7 +10,7 @@ function iterGlyphs(glyphList: unknown): GlyphLike[] {
 }
 
 /** All Unicode codepoints mapped in the font (primary + secondary cmap entries). */
-export function collectCodepointsFromFont(font: opentype.Font): Set<number> {
+export function collectCodepointsFromFont(font: ReturnType<typeof opentype.parse>): Set<number> {
   const set = new Set<number>();
   for (const g of iterGlyphs(font.glyphs?.glyphs)) {
     if (g.unicodes?.length) {
