@@ -32,6 +32,11 @@ export function codepointsFromPreset(name: string): number[] {
 export function parseCodepointList(input: string): number[] {
   const set = new Set<number>();
   const parts = input.split(/[\s,;]+/).filter(Boolean);
+  const listUsesHex = parts.some((p) => {
+    if (p.includes("-")) return true;
+    const c = p.replace(/^U\+/i, "");
+    return p.startsWith("0x") || /^U\+/i.test(p) || /[a-fA-F]/.test(c);
+  });
   for (const part of parts) {
     if (part.includes("-")) {
       const [a, b] = part.split("-").map((s) => parseInt(s.replace(/^U\+/i, ""), 16));
@@ -40,7 +45,9 @@ export function parseCodepointList(input: string): number[] {
       }
     } else {
       const cleaned = part.replace(/^U\+/i, "");
-      const cp = parseInt(cleaned, part.startsWith("0x") || /^[0-9a-fA-F]+$/.test(cleaned) ? 16 : 10);
+      const radix =
+        listUsesHex || part.startsWith("0x") || /^U\+/i.test(part) ? 16 : 10;
+      const cp = parseInt(cleaned, radix);
       if (!Number.isNaN(cp)) set.add(cp);
     }
   }

@@ -1,10 +1,11 @@
 import { fromSfnt, sha256Hex, toSfnt } from "./format.js";
-import type { FontFormat, FontInspect, SubsetOpts, SubsetResult } from "./types.js";
+import type { FontFormat, SubsetOpts, SubsetResult } from "./types.js";
 import {
   codepointsFromPreset,
   codepointsFromText,
   LANGUAGE_PACKS,
   parseCodepointList,
+  UNICODE_PRESETS,
 } from "./unicode-presets.js";
 import { inspect } from "./inspect.js";
 import { getSupportedCodepoints, intersectCodepoints } from "./cmap.js";
@@ -31,24 +32,9 @@ async function hbSubset(font: Uint8Array, options: Record<string, unknown>): Pro
   return hbSubsetImpl(font, options);
 }
 
-async function safeInspectAfterSubset(
-  out: Uint8Array,
-  beforeGlyphs: number,
-): Promise<FontInspect> {
-  try {
-    return await inspect(toArrayBuffer(out));
-  } catch {
-    return {
-      format: "woff2",
-      sizeBytes: out.byteLength,
-      numGlyphs: Math.min(beforeGlyphs, 256),
-      tables: [],
-      unicodeRanges: [],
-      names: [],
-      hinting: false,
-      features: [],
-      licenseHints: [],
-    };
+function assertKnownPreset(name: string, context: string): void {
+  if (!UNICODE_PRESETS[name]) {
+    throw new Error(`Unknown ${context}: "${name}". Known presets: ${Object.keys(UNICODE_PRESETS).join(", ")}`);
   }
 }
 
@@ -58,12 +44,20 @@ export function resolveCodepoints(opts: SubsetOpts): number[] {
       return codepointsFromText(opts.text ?? "");
     case "codepoints":
       return opts.codepoints ?? [];
-    case "unicode-range":
-      return opts.unicodeRange ? codepointsFromPreset(opts.unicodeRange) : [];
+    case "unicode-range": {
+      const name = opts.unicodeRange ?? "";
+      if (!name) throw new Error("No Unicode preset selected.");
+      assertKnownPreset(name, "Unicode preset");
+      return codepointsFromPreset(name);
+    }
     case "language-pack": {
       const pack = opts.languagePack ?? "CJK Common";
-      const preset = LANGUAGE_PACKS[pack] ?? pack;
-      return codepointsFromPreset(preset);
+      if (!LANGUAGE_PACKS[pack]) {
+        throw new Error(
+          `Unknown language pack: "${pack}". Known packs: ${Object.keys(LANGUAGE_PACKS).join(", ")}`,
+        );
+      }
+      return codepointsFromPreset(LANGUAGE_PACKS[pack]);
     }
     case "glyph-ids":
       return [];
@@ -76,6 +70,11 @@ export async function subset(
   input: ArrayBuffer,
   opts: SubsetOpts,
 ): Promise<SubsetResult> {
+  const outputFormat: FontFormat = opts.outputFormat ?? "woff2";
+  if (outputFormat === "ttx") {
+    throw new Error("TTX/XML export requires the optional worker; choose WOFF2, WOFF, TTF, or OTF.");
+  }
+
   const before = await inspect(input);
   const sfnt = await toSfnt(input);
   const supported = await getSupportedCodepoints(input);
@@ -86,7 +85,9 @@ export async function subset(
   };
 
   if (opts.mode === "text") {
-    subsetOptions.text = opts.text ?? " ";
+    const text = opts.text?.trim();
+    if (!text) throw new Error("Subset text is empty. Enter characters to keep in the font.");
+    subsetOptions.text = text;
   } else if (opts.mode === "glyph-ids") {
     const ids = opts.glyphIds ?? [];
     if (!ids.length) throw new Error("No glyph IDs provided.");
@@ -99,14 +100,18 @@ export async function subset(
       unicodes = cps;
     }
     unicodes = intersectCodepoints(unicodes, supported);
-    subsetOptions.unicodes = unicodes.length ? unicodes : [0x20];
+    if (!unicodes.length) {
+      throw new Error(
+        "None of the requested codepoints are present in this font's cmap. Try a different preset or font.",
+      );
+    }
+    subsetOptions.unicodes = unicodes;
   }
 
   const result = await hbSubset(sfnt, subsetOptions);
-  const outputFormat: FontFormat = opts.outputFormat ?? "woff2";
   const out = await fromSfnt(new Uint8Array(result), outputFormat);
 
-  const after = await safeInspectAfterSubset(out, before.numGlyphs);
+  const after = await inspect(toArrayBuffer(out));
   return {
     data: out,
     format: outputFormat,

@@ -29,9 +29,15 @@ export async function instance(
 
   const glyphIds = Array.from({ length: before.numGlyphs }, (_, i) => i);
 
+  const clampedAxes: Record<string, number> = {};
+  for (const ax of before.variableAxes) {
+    const raw = axisValues[ax.tag] ?? ax.default;
+    clampedAxes[ax.tag] = Math.min(ax.max, Math.max(ax.min, raw));
+  }
+
   const result = await hbSubsetImpl(sfnt, {
     glyphIds,
-    variationAxes: { ...axisValues },
+    variationAxes: clampedAxes,
     layoutFeatures: "*",
   });
 

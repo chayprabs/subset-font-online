@@ -20,6 +20,12 @@ export type WorkerResponse =
 
 const pending = new Map<number, { resolve: (v: WorkerResponse) => void; reject: (e: Error) => void }>();
 
+function failAllPending(message: string): void {
+  const err = new Error(message);
+  for (const job of pending.values()) job.reject(err);
+  pending.clear();
+}
+
 function getWorker(): Worker {
   if (!worker) {
     worker = new Worker(new URL("../workers/font.worker.ts", import.meta.url), {
@@ -32,6 +38,14 @@ function getWorker(): Worker {
       pending.delete(data.id);
       if (data.type === "error") job.reject(new Error(data.message));
       else job.resolve(data);
+    });
+    worker.addEventListener("error", (ev) => {
+      failAllPending(ev.message || "Font worker crashed");
+      worker = null;
+    });
+    worker.addEventListener("messageerror", () => {
+      failAllPending("Font worker message error");
+      worker = null;
     });
   }
   return worker;
